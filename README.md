@@ -45,9 +45,6 @@ Each subnet has to be associated with a route table, or set of network rules, th
 
 Security groups act as firewalls at the instance level, to control inbound and outbound traffic. The template creates security groups for an application, load balancer, database, and bastion host. Depending on what other templates you run, not all of them may be used.
 
-Ok time to run the tempalte -------------->
-When you run the template you’ll be asked for a stack name, and an IP address or address range from which you will allow SSH access to the bastion host. Use CIDR notation.]?
-
 
 ### Bastion host
 
