@@ -1,146 +1,130 @@
-# AWS Startup Kit Templates
+# Overview
 
-The AWS Startup Kit [CloudFormation](https://aws.amazon.com/cloudformation/) templates create stacks to help with getting started on AWS. Components include a VPC, a [bastion host](https://en.wikipedia.org/wiki/Bastion_host), and optionally a relational
-database and/or an [AWS Elastic Beanstalk](https://aws.amazon.com/elasticbeanstalk/) application.
+This repo contains a collection of AWS [CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) templates intended to help you set up common pieces of AWS infrastructure. Each template defines a [stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacks.html), which is a collection of related resources that can be created or deleted as a single unit. Templates are available for creating:
+- A secure network inside a [VPC](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Introduction.html)
+- A [bastion host](https://en.wikipedia.org/wiki/Bastion_host) to securely access instances inside the VPC
+- A deployment environment using AWS [Elastic Beanstalk](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/Welcome.html)
+- A container-based environment using [Amazon Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ECS_GetStarted.html)
+- A relational database using [Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html)
+- An [Amazon Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Aurora.html) DB cluster
+- [Billing alerts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/monitor_estimated_charges_with_cloudwatch.html#turning_on_billing_metrics), to monitor your costs
 
-The VPC template is the foundation for everything else. It creates a VPC that includes
-the following network resources:
-- Two public subnets
-- Two private subnets
-- Single or redundant NAT Gateway(s) to allow instances in private subnets to communicate with AWS services
-- Two route tables, one for public subnets, and the other for private subnets
-- Security groups for an application, load balancer, database, and bastion host
+The VPC template is a requirement for the others. You can either run the templates/vpn.cfn.yml template by itself prior to using the others, or run any one of the vpn-*.cfn.yml wrapper templates at the top level of this repo to create sets of resources in the same stack.
 
-The bastion host or jump server is used to provide SSH access to instances with private IP addresses in
-the application's security group.
+## Prerequisites
 
-If desired, a relational database can be created using the [db.cfn.yml](db.cfn.yml) template. Either
-a MySQL or PostgreSQL database is created in the [Amazon Relational Database Service](https://aws.amazon.com/rds/)
-(RDS), which automates much of the heavy lifting of database setup and maintenance. Following best practices, the database is
-created in private subnets concealed from the public Internet.
+If you haven't already done so you first need to:
+- [Create an AWS account](https://aws.amazon.com/blogs/startups/how-to-get-started-on-aws-from-a-dead-standstill/).
+- Make sure you're signed into AWS as an [IAM user with admin access](https://docs.aws.amazon.com/IAM/latest/UserGuide/getting-started_create-admin-group.html). Avoid using the root account!
+- [Create an EC2 key pair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair). This is necessary to use the bastion host.
+- [Clone this repo](https://help.github.com/articles/cloning-a-repository/) so that you have a local copy of the templates.
 
-The optional [app.cfn.yml](app.cfn.yml) template creates an Elastic Beanstalk application with EC2 application servers
-placed in private subnets while the load balancer in front of them is placed in public subnets. The complete architecture is as follows:
+## Creating stacks
+Use the AWS [CloudFormation Console](https://console.aws.amazon.com/cloudformation/home) to run the templates. Click the "Create Stack" button in the upper left corner of the console, then under "Choose a template", select "Upload a template to Amazon S3" and click "Browse" to find your local fork of this repository and choose the template you want to run.
 
-![Architecture](images/architecture.png)
+## The templates
 
-### USING THE TEMPLATES
-
-#### Prerequisites
-
-If you haven't done so already:
-
-- [Make sure you're signed into AWS as an IAM user with admin access](http://docs.aws.amazon.com/IAM/latest/UserGuide/getting-started_create-admin-group.html).
-Avoid using the root account.
+Here’s a description of the resources created by each file in the /templates directory:
 
 
-- [Create an EC2 key pair](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair). This is necessary to use the bastion host.
+### VPC
 
-#### Steps for Creating the Infrastructure
+The vpc.cfn.yml template is a prerequisite for most of the others--you need to either run it first, or run one of the wrapper templates at the top level of the repo, which include it. It creates an [Amazon Virtual Private Cloud](https://aws.amazon.com/vpc/, a virtual data center in which you can securely run AWS resources. It also creates related networking resources:
+- 2 Public [subnets](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html)
+- 2 Private subnets
+- 1 [Internet gateway](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Internet_Gateway.html)
+- 1 [NAT gateway](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/vpc-nat-gateway.html)
+- 3 [route tables](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Route_Tables.html)
+- A bunch of [security groups](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Security.html).
 
-All of the following steps involve using the AWS CloudFormation console. Simply
-click the "Create Stack" button in the upper left corner of the console. Next,
-under "Choose a template", select "Upload a template to Amazon S3" and click
-"Browse" to find your local fork of this repository and choose the relevant template.
+Subnets are isolated network areas--public subnets are visible to the Internet, private ones can only be reached from inside the VPC. If a resource in a private subnet has to communicate externally it has to do so via a NAT Gateway, which acts as a proxy.
 
-Create the stacks in the following order:
+The VPC template creates two public and two private subnets, in different [Availability Zones (AZ)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html) for redundancy. A subnet is public if it’s associated with an Internet gateway, which allow it to communicate with the Internet
 
-**[1] Create the VPC**: Select the vpc.cfn.yml template. Pick a relevant stack
-name, and an IP address or address range from which you will allow SSH access
-to the bastion host. Use [CIDR notation](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing).
+Each subnet has to be associated with a route table, or set of network rules, that define allowed traffic. Route tables operate at the subnet level. The VPC template creates two of them, one for the public subnets, and one for the private.
 
-**[2] Create the bastion**: Select the bastion.cfn.yml template. Pick a relevant
-stack name, and then enter the name of your EC2 key pair and the name of the VPC
-stack you created in step [1].
+Security groups act as firewalls at the instance level, to control inbound and outbound traffic. The template creates security groups for an application, load balancer, database, and bastion host. Depending on what other templates you run, not all of them may be used.
 
-**[3] Create the database**: Select the db.cfn.yml template.
-- Pick a relevant stack name, and then enter the various database parameters such
-as the user name and password.
-- For NetworkStackName, enter the name of the VPC stack you created in step [1].
-- For EnvironmentName, select dev or prod.  Keep in mind that prod will set up a
-Multi-AZ RDS database that is highly available and configured with a primary-standby
-setup. This is a best practice for production, but not for a test/development environment
-and would be an unnecessary expense.
-
-**[4] Create the app**: First, decide which app you'd like to deploy.
-- You can try out a Startup Kit sample workload.  At this time, there is one available,
-a Node.js Express app, see https://github.com/awslabs/startup-kit-nodejs.
-- Alternatively, if you wish to deploy your own code, see 'Adding an Application'
-at the end of this README.
-- Before proceeding, follow the directions in the Startup Kit sample workload README.
-It's a good idea to make sure your app runs locally before deploying on AWS.
-- Either create a S3 bucket to hold your app code, or make sure you have an existing S3 bucket you can use.  Put your code in the bucket.
-- Select the app.cfn.yml template.
-- Pick a relevant stack name.
-- For AppS3Bucket, enter the name of the S3 bucket that contains your code.
-- For AppS3Key, enter the name of your code file in the S3 bucket.  For example, if your
-app is a Node.js app, it would be the name of your Node.js code zip file.
-- For NetworkStackName, enter the name of the VPC stack you created in step [1].
-- For DatabaseStackName enter the name of the database stack you created in step [3].
-- IMPORTANT:  before clicking the **Create** button in the CloudFormation console,
-go to the Capabilities section just above the button, and be sure you have checked the
-checkbox acknowledging that IAM resources will be created.
-
-**[5] Create DevOps resources**: Select the devops.cfn.yml template. NOTE:  These resources
-are meant to be used with the Node.js sample app, but can be modified to work with another app.
-- Pick a relevant stack name.
-- For AppStackName, enter the name of the app stack you created in step [4].
-
-#### Connecting to Your Instances and Database
-
-In general, it is best to treat your fleet of instances as "cattle, not pets" and
-avoid SSH'ing into them to manage them individually. When it's necessary to connect
-for debugging purposes etc., connect via the bastion host created with the bastion
-template. One way to do this is to use SSH agent forwarding. For details about how
-to set this up on your local computer, consult the relevant [AWS blog post](https://aws.amazon.com/blogs/security/securely-connect-to-linux-instances-running-in-a-private-amazon-vpc).
-
-Since the database is in a private subnet, it also is necessary to connect to it via
-the bastion host using a method such as TCP/IP over SSH. For an example of how
-to do this with MySQL Workbench, see the [documentation](http://dev.mysql.com/doc/workbench/en/wb-mysql-connections-methods-ssh.html).
-
-In that example, you would replace the SSH Hostname with the public DNS name of
-your bastion host, SSH Username with "ec2-user", and SSH Key File with the path
-to the EC2 key pair you created. Ignore the SSH Password field. For MySQL Hostname,
-enter the "RdsDbURL" from the Outputs tab for the database stack in the CloudFormation
-console. MySQL Server Port is 3306. For the Username and Password fields, enter the
-corresponding outputs for "DbUser" and "DbPassword" from the Outputs tab.
+Ok time to run the tempalte -------------->
+When you run the template you’ll be asked for a stack name, and an IP address or address range from which you will allow SSH access to the bastion host. Use CIDR notation.]?
 
 
-#### Adding an Application
+### Bastion host
 
-Using the app template automates the process of setting up an app in AWS Elastic
-Beanstalk. Additionally, using a Startup Kit sample workload allows you to quickly
-test out your VPC and database setup.
+It's preferable not to ssh into instances at all, instead configuring them to send logs to [CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html) or other services, and managing instantiation, configuration, and termination of instances using devops tools.
 
-However, you can deploy your own app instead of a Startup Kit sample workload.  If
-you use the app template, keep in mind that it is designed to work with a relational
-database in RDS.  If your own app uses a relational database, the database connection
-string parameters should conform to the naming conventions in the template, or you
-can fork the templates and modify the names.  Similarly, if you're not using a
-relational database at all, you can modify the app template accordingly.
+If you do need to connect directly to EC2 instances, it's best practice (and for instances in a private subnets, a requirement) to use a bastion host, otherwise known jump box. A bastion host is an instance that is publicly accessible, and which is also has access resources in private subnets, so it can act as a secure go between--you can ssh into the bastion host, and from there into your other instances. When you run the bastion.cfn.yml template, it creates:
+- An t2.micro EC2 instance
+- An Elastic IP Address
+- An Elastic Network Interface
 
-Additionally, it is not necessary to use the app template to leverage the benefits
-of the other templates. You can add an application on top of the infrastructure created
-in steps [1] to [3] using any technologies of your choice.
+The bastion template is dependent on having previously run the VPC template.
 
-For example, you can use the Elastic Beanstalk console to set up a load balanced,
-highly available environment. Alternatively, you can directly set up a load balancer
-and an autoscaling group (ASG) without using Elastic Beanstalk. To ensure your app
-is highly available, make sure to spin up at least two server instances in separate
-availability zones.
+### Elastic Beanstalk
 
-As you add application components on top of the infrastructure created with the
-templates, make sure that each component is (a) set up in the VPC created in
-step [1] above, and (b) assigned to the relevant security group created by the
-VPC template. Check the Outputs tab of the CloudFormation console for the IDs
-of the security groups, which will be prefixed with "sg-". In particular:
+AWS Elastic Beanstalk is a service that lets you define an environment for common application types, and deploy code into it. The Beanstalk template is dependent on the VPC, and optionally can be used with the bastion, RDS, or Aurora templates.
 
-- Load balancers, such as Application Load Balancers or Classic Load Balancers,
-should be assigned to "ELBSecurityGroup" so they can talk to the application
-instances.
+When you run the template it asks for a series of inputs defining your environment. Those with constrained values are:
+- A stack type, with allowed values of node, rails, python, python3 or spring.
+- An environment name with allowed values  of dev or prod.
 
-- Application instances, such as RESTful API servers or web servers, should be
-assigned to the "AppSecurityGroup" so they can talk to the database as
-well as the load balancer, and receive SSH traffic from the bastion host.
+It creates:
+- A service role
+- And Elastic Beanstalk application
+- An Elastic Beanstalk environment
+- An Auto Scaling Group
+- A Load Balancer 
 
 
+### Fargate
+
+[AWS Fargate](https://aws.amazon.com/fargate/) is part of [Amazon Elastic Container Service (ECS)](https://aws.amazon.com/ecs/). It's a managed service for running container-based applications, without having to worry about the underlying servers--sort of like [Lambda](https://aws.amazon.com/lambda/) for containers.
+
+It creates:
+- An S3 bucket for the container
+- An S3 bucket for CodePipeline artifacts
+- A CodePipeline
+- A CodePipeline service role
+- A CodeBuild project
+- A CodeBuild service role
+- An Elastic Container Repository (ECR) repository
+- An Application Load Balancer (ALB)
+- An ALB Route 53 record
+- ELB target groups stuff
+- A Fargate task definition
+- A Fargate service with associated scaling resources
+
+
+### RDS
+
+[Amazon Relational Database Service (RDS)](https://aws.amazon.com/rds/) is a service for running relational databases without having to manage the server software, backups, or other maintenance tasks. The RDS service as a whole supports Amazon Aurora, PostgreSQL, MySQL, MariaDB, Oracle, and Microsoft SQL Server; the template included here currently works with PostgreSQL, MySQL, and MariaDB.
+
+It creates:
+- A DB instance
+- A DB subnet group
+
+
+### Aurora
+
+Amazon Aurora is a high-performance cloud-optimized relational database, which is compatible with MySQL and PostgreSQL. It’s treated separately than RDS because Aurora has a few unique characteristics.
+
+It creates:
+- A DB Cluster
+- An Aurora DB instance
+- A DB subnet group
+
+### Billing Alerts
+
+If you leave AWS resources running longer than intended, have unexpected traffic levels, or misconfigure or over-provision resources, your bill can climb higher or faster than expected. To avoid surprises we recommend turning on [billing alerts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/monitor_estimated_charges_with_cloudwatch.html#turning_on_billing_metrics), so that you're notified when charges go above preconfigured thresholds. The billing_alert template makes this easier.
+
+Before running it you need to use the AWS console to enable billing alerts:
+
+- Log into the [billing section of the console](https://console.aws.amazon.com/console/home), also reachable by clicking your username on the top right, and selecting My Billing Dashboard.
+- Select Preferences from the list of options on the left.
+- Check Receive Billing Alerts. Once saved this cannot be disabled.
+
+Now you can run the billing_alert.cfn.yml template. You'll be asked for the threshold (in US dollars) for receiving an alert and the email address the alert should be sent to. If you want to get alerts at more than one threshold, you can run the template multiple times. The template will create:
+- A [CloudWatch alarm](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cw-alarm.html)
+- An [SNS topic](https://docs.aws.amazon.com/sns/latest/dg/CreateTopic.html)
+
+You can read about more [ways to avoid unexpected charges](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/checklistforunwantedcharges.html).
