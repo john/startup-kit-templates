@@ -1,15 +1,16 @@
 # Overview
 
-This repo contains a collection of AWS [CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) templates intended to help you set up common pieces of AWS infrastructure. Each template defines a [stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacks.html), which is a collection of related resources that can be created or deleted as a single unit. Templates are available for creating:
+This repo contains a collection of AWS [CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) templates intended to help you set up common pieces of AWS infrastructure. Each template defines a [stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacks.html), which is a collection of related resources that can be created, updated, or deleted as a single unit. Templates are available for creating:
+
 - A secure network inside a [VPC](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Introduction.html)
 - A [bastion host](https://en.wikipedia.org/wiki/Bastion_host) to securely access instances inside the VPC
 - A deployment environment using AWS [Elastic Beanstalk](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/Welcome.html)
 - A container-based environment using [Amazon Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ECS_GetStarted.html)
 - A relational database using [Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html)
 - An [Amazon Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Aurora.html) DB cluster
-- [Billing alerts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/monitor_estimated_charges_with_cloudwatch.html#turning_on_billing_metrics), to monitor your costs
+- [Billing alerts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/monitor_estimated_charges_with_cloudwatch.html#turning_on_billing_metrics) to monitor your costs
 
-The VPC template is a requirement for the others. You can either run the templates/vpn.cfn.yml template by itself prior to using the others, or run any one of the vpn-*.cfn.yml wrapper templates at the top level of this repo to create sets of resources in the same stack.
+The VPC template is a requirement for the others. You can either run the templates/vpc.cfn.yml template by itself prior to using the others, or run any one of the vpn-*.cfn.yml wrapper templates at the top level of this repo to create sets of resources in the same stack.
 
 ## Prerequisites
 
@@ -29,7 +30,7 @@ Here’s a description of the resources created by each file in the /templates d
 
 ### VPC
 
-The vpc.cfn.yml template is a prerequisite for most of the others--you need to either run it first, or run one of the wrapper templates at the top level of the repo, which include it. It creates an [Amazon Virtual Private Cloud](https://aws.amazon.com/vpc/, a virtual data center in which you can securely run AWS resources. It also creates related networking resources:
+The vpc.cfn.yml template is a prerequisite for most of the others--you need to either run it first, or run one of the wrapper templates at the top level of the repo, which include it. It creates an [Amazon Virtual Private Cloud](https://aws.amazon.com/vpc/), a private networking environment in which you can securely run AWS resources. It also creates related networking resources:
 - 2 Public [subnets](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html)
 - 2 Private subnets
 - 1 [Internet gateway](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Internet_Gateway.html)
@@ -37,23 +38,25 @@ The vpc.cfn.yml template is a prerequisite for most of the others--you need to e
 - 3 [route tables](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Route_Tables.html)
 - A bunch of [security groups](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Security.html).
 
-Subnets are isolated network areas--public subnets are visible to the Internet, private ones can only be reached from inside the VPC. If a resource in a private subnet has to communicate externally it has to do so via a NAT Gateway, which acts as a proxy.
+Subnets are isolated network areas--resources in public subnets are visible to the Internet, resources in private subnets can only be reached from inside the VPC. If a resource in a private subnet needs to communicate externally it has to do so via a NAT Gateway, which acts as a proxy.
 
 The VPC template creates two public and two private subnets, in different [Availability Zones (AZ)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html) for redundancy. A subnet is public if it’s associated with an Internet gateway, which allow it to communicate with the Internet
 
-Each subnet has to be associated with a route table, or set of network rules, that define allowed traffic. Route tables operate at the subnet level. The VPC template creates two of them, one for the public subnets, and one for the private.
+Each subnet has to be associated with a route table, or set of network rules, that define allowed traffic. Route tables operate at the subnet level. The VPC template creates two of them: one for the public subnets, and one for the private.
 
 Security groups act as firewalls at the instance level, to control inbound and outbound traffic. The template creates security groups for an application, load balancer, database, and bastion host. Depending on what other templates you run, not all of them may be used.
 
 
 ### Bastion host
 
-It's preferable not to ssh into instances at all, instead configuring them to send logs to [CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html) or other services, and managing instantiation, configuration, and termination of instances using devops tools.
+It's preferable not to ssh into instances at all, instead monintoring by configuring them to send logs to [CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html) or other services, and managing instantiation, configuration, and termination of instances using devops tools.
 
-If you do need to connect directly to EC2 instances, it's best practice (and for instances in a private subnets, a requirement) to use a bastion host, otherwise known jump box. A bastion host is an instance that is publicly accessible, and which is also has access resources in private subnets, so it can act as a secure go between--you can ssh into the bastion host, and from there into your other instances. When you run the bastion.cfn.yml template, it creates:
+If you do need to connect directly to EC2 instances, it's best practice (and for instances in a private subnets, a requirement) to use a bastion host, otherwise known jump box. A bastion host is an EC2 instance that is publicly accessible, and also has access resources in private subnets, allowing it to function as a secure go-between. You can ssh into the bastion host, and from there into your other instances. When you run the bastion.cfn.yml template it creates:
 - An t2.micro EC2 instance
-- An Elastic IP Address
-- An Elastic Network Interface
+- An [Elastic IP Address (EIP)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html)
+- An [Elastic Network Interface (ENI)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html)
+
+When you run the template you'll be able to set how long CloudWatch logs are retained, and to enable [Multi-Factor Authentication (MFA)](http://searchsecurity.techtarget.com/definition/multifactor-authentication-MFA), among other options.
 
 The bastion template is dependent on having previously run the VPC template.
 
@@ -67,10 +70,11 @@ When you run the template it asks for a series of inputs defining your environme
 
 It creates:
 - A service role
-- And Elastic Beanstalk application
+- An Elastic Beanstalk application
 - An Elastic Beanstalk environment
-- An Auto Scaling Group
-- A Load Balancer 
+- An [Auto Scaling Group](https://docs.aws.amazon.com/autoscaling/ec2/userguide/AutoScalingGroup.html)
+- A Load Balancer
+- Related IAM [Roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) and [Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html).
 
 
 ### Fargate
@@ -80,15 +84,13 @@ It creates:
 It creates:
 - An S3 bucket for the container
 - An S3 bucket for CodePipeline artifacts
-- A CodePipeline
-- A CodePipeline service role
-- A CodeBuild project
+- A [CodeBuild](https://docs.aws.amazon.com/codebuild/latest/userguide/welcome.html) project
 - A CodeBuild service role
-- An Elastic Container Repository (ECR) repository
-- An Application Load Balancer (ALB)
-- An ALB Route 53 record
+- An [Elastic Container Registry (ECR)](https://docs.aws.amazon.com/AmazonECR/latest/userguide/what-is-ecr.html) repository
+- An [Application Load Balancer (ALB)](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html)
+- An [ALB Route 53 record](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-to-elb-load-balancer.html)
 - ELB target groups stuff
-- A Fargate task definition
+- A [Fargate task definition](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-task-definition.html)
 - A Fargate service with associated scaling resources
 
 
@@ -106,8 +108,8 @@ It creates:
 Amazon Aurora is a high-performance cloud-optimized relational database, which is compatible with MySQL and PostgreSQL. It’s treated separately than RDS because Aurora has a few unique characteristics.
 
 It creates:
-- A DB Cluster
-- An Aurora DB instance
+- An [Aurora DB Cluster](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Aurora.CreateInstance.html)
+- An [Aurora DB instance](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Aurora.html)
 - A DB subnet group
 
 ### Billing Alerts
