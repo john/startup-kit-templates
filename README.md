@@ -8,11 +8,8 @@ This repo contains a collection of AWS [CloudFormation](https://docs.aws.amazon.
 - A container-based environment using [Amazon Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ECS_GetStarted.html)
 - A relational database using [Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html)
 - An [Amazon Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Aurora.html) DB cluster
-- [Billing alerts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/monitor_estimated_charges_with_cloudwatch.html#turning_on_billing_metrics) to monitor your costs
 
 The VPC template is a requirement for the others. You can either run the templates/vpc.cfn.yml template by itself prior to using the others, or run any one of the vpc-*.cfn.yml wrapper templates at the top level of this repo to create sets of resources. For example, vpc-bastion-fargate-rds.cfn.yml will create a single stack containing a vpc, bastion host, fargate cluster, and database.
-
-To launch stacks directly, see the table at the bottom of this README.
 
 ## Prerequisites
 
@@ -25,6 +22,8 @@ If you haven't already done so you first need to:
 ## Creating stacks
 Use the AWS [CloudFormation Console](https://console.aws.amazon.com/cloudformation/home) to run the templates. Click the "Create Stack" button in the upper left corner of the console, then under "Choose a template", select "Upload a template to Amazon S3" and click "Browse" to find your local fork of this repository and choose the template you want to run.
 
+To launch stacks directly directly from this README see the [table below](#launch-table).
+
 ## The templates
 
 Here’s a description of the resources created by each file in the /templates directory:
@@ -32,7 +31,7 @@ Here’s a description of the resources created by each file in the /templates d
 
 ### VPC
 
-The vpc.cfn.yml template is a prerequisite for most of the others--you need to either run it first, or run one of the wrapper templates at the top level of the repo, which include it. It creates an [Amazon Virtual Private Cloud](https://aws.amazon.com/vpc/), a private networking environment in which you can securely run AWS resources. It also creates related networking resources:
+The **_vpc.cfn.yml_** template is a prerequisite for most of the others--you need to either run it first, or run one of the wrapper templates at the top level of the repo, which include it. It creates an [Amazon Virtual Private Cloud](https://aws.amazon.com/vpc/), a private networking environment in which you can securely run AWS resources. It also creates related networking resources:
 - 2 Public [subnets](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html)
 - 2 Private subnets
 - 1 [Internet gateway](https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Internet_Gateway.html)
@@ -53,10 +52,17 @@ Security groups act as firewalls at the instance level, to control inbound and o
 
 It's preferable not to ssh into instances at all, instead monintoring instances by configuring them to send logs to [CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html) or other services, and managing instantiation, configuration, and termination of instances using devops tools.
 
-If you do need to connect directly to EC2 instances, it's best practice (and for instances in a private subnets, a requirement) to use a bastion host, otherwise known as a jump box. A bastion host is an EC2 instance that is publicly accessible, and also has access resources in private subnets, allowing it to function as a secure go-between. You can ssh into the bastion host, and from there connect to your private resources. When you run the bastion.cfn.yml template it creates:
+If you do need to connect directly to EC2 instances, it's best practice (and for instances in a private subnets, a requirement) to use a bastion host, otherwise known as a jump box. A bastion host is an EC2 instance that is publicly accessible, and also has access resources in private subnets, allowing it to function as a secure go-between. You can ssh into the bastion host, and from there connect to your private resources.
+
+The **_bastion.cfn.yml_** template creates:
+
 - A t2.micro EC2 instance
 - An [Elastic IP Address (EIP)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html)
 - An [Elastic Network Interface (ENI)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html)
+- A [log stream](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-logstream.html) , and an IAM profile, role, and group for use in logging
+- [Cloudwatch alarms](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AlarmThatSendsEmail.html) for:
+  - Three login attempts with invalid username occur within one minute
+  - Fifteen login attempts with either an invalid key or invalid username occur within five minutes
 
 You can also set how long CloudWatch logs are retained, and optionally enable [Multi-Factor Authentication (MFA)](http://searchsecurity.techtarget.com/definition/multifactor-authentication-MFA), among other options.
 
@@ -68,11 +74,13 @@ For security and cost optimization it's best practice to stop (not terminate!) t
 
 AWS Elastic Beanstalk is a service that lets you define an environment for common application types, and deploy code into it. The Beanstalk template is dependent on the VPC, and optionally can be used with the bastion, RDS, or Aurora templates.
 
-When you run the template it asks for a series of inputs defining your environment. Those with constrained values are:
+The **_elastic-beanstalk.cfn.yml_** template asks for a series of inputs defining your environment. Those with constrained values are:
+
 - A stack type, with allowed values of node, rails, python, python3 or spring.
 - An environment name with allowed values  of dev or prod.
 
 It creates:
+
 - A service role
 - An Elastic Beanstalk application
 - An Elastic Beanstalk environment
@@ -85,7 +93,8 @@ It creates:
 
 [AWS Fargate](https://aws.amazon.com/fargate/) is part of [Amazon Elastic Container Service (ECS)](https://aws.amazon.com/ecs/). It's a managed service for running container-based applications, without having to worry about the underlying servers--sort of like [Lambda](https://aws.amazon.com/lambda/) for containers.
 
-It creates:
+The **_fargate.cfn.yml_** template creates:
+
 - An S3 bucket for the container
 - An S3 bucket for CodePipeline artifacts
 - A [CodeBuild](https://docs.aws.amazon.com/codebuild/latest/userguide/welcome.html) project
@@ -102,7 +111,8 @@ It creates:
 
 [Amazon Relational Database Service (RDS)](https://aws.amazon.com/rds/) is a service for running relational databases without having to manage the server software, backups, or other maintenance tasks. The RDS service as a whole supports Amazon Aurora, PostgreSQL, MySQL, MariaDB, Oracle, and Microsoft SQL Server; this template currently works with PostgreSQL, MySQL, and MariaDB, and supports t2, m4, and r4 [instance types](https://aws.amazon.com/rds/instance-types/).
 
-It creates:
+The **_db.cfn.yml_** template creates:
+
 - A DB instance
 - A DB subnet group
 
@@ -111,27 +121,13 @@ It creates:
 
 Amazon Aurora is a high-performance cloud-optimized relational database, which is compatible with MySQL and PostgreSQL. It’s treated separately than RDS because Aurora has a few unique characteristics.
 
-It creates:
+The **_aurora.cfn.yml_** template creates:
+
 - An [Aurora DB Cluster](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Aurora.CreateInstance.html)
 - An [Aurora DB instance](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Aurora.html)
 - A DB subnet group
 
-### Billing Alerts
-
-If you leave AWS resources running longer than intended, have unexpected traffic levels, or misconfigure or over-provision resources, your bill can climb higher or faster than expected. To avoid surprises we recommend turning on [billing alerts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/monitor_estimated_charges_with_cloudwatch.html#turning_on_billing_metrics), so that you're notified when charges go above preconfigured thresholds. The billing_alert template makes this easier.
-
-Before running it you need to use the AWS console to enable billing alerts:
-
-- Log into the [billing section of the console](https://console.aws.amazon.com/console/home), also reachable by clicking your username on the top right, and selecting My Billing Dashboard.
-- Select Preferences from the list of options on the left.
-- Check Receive Billing Alerts. Once saved this cannot be disabled.
-
-Now you can run the billing_alert.cfn.yml template. You'll be asked for the threshold (in US dollars) for receiving an alert and the email address the alert should be sent to. If you want to get alerts at more than one threshold, you can run the template multiple times. The template will create:
-- A [CloudWatch alarm](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cw-alarm.html)
-- An [SNS topic](https://docs.aws.amazon.com/sns/latest/dg/CreateTopic.html)
-
-You can read about more [ways to avoid unexpected charges](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/checklistforunwantedcharges.html).
-
+<a name="launch-table"></a>
 ### Launch stack
 
 Click a row's "Launch stack" button to launch a single stack in the specified region containing all the resources in the checked templates.
