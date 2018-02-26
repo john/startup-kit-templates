@@ -1,0 +1,85 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: ElastiCache and related resources
+
+# ElastiCache stack creation prerequisite:  First create a VPC stack - see README for more info
+Parameters:
+  
+  # VPCStack
+  NetworkStackName:
+    Description: Active CloudFormation stack containing VPC resources
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
+    
+  ClusterName:
+    Description: Custom name of the cluster. Auto generated if you don't supply your own.
+    Type: String
+    
+  CacheNodeType:
+    Description: Cache node instance class, e.g. cache.t2.micro(free tier). See https://docs.aws.amazon.com/AmazonElastiCache/latest/UserGuide/CacheNodes.SelectSize.html
+    Type: String
+    Default: cache.t2.micro
+    ConstraintDescription: Node instance class not supported
+    AllowedValues:
+      - cache.t2.micro
+      - cache.t2.small
+      - cache.t2.medium
+      - cache.m4.large
+      - cache.m4.xlarge
+      - cache.m4.2xlarge
+      - cache.m4.4xlarge
+      - cache.m4.10xlarge
+      - cache.r4.large
+      - cache.r4.xlarge
+      - cache.r4.2xlarge
+      - cache.r4.4xlarge
+      - cache.r4.8xlarge
+      - cache.r4.16xlarge
+      
+      
+  CacheEngine:
+    Description: The underlying cache engine, either Redis or Memcached
+    Type: String
+    Default: redis
+    ConstraintDescription: Node instance class not supported
+    AllowedValues:
+      - redis
+      - memcached
+  
+Resources:
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Elasticache Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${NetworkStackName}-VpcID"
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: 11211
+          ToPort: 11211
+      
+  SubnetGroup: 
+    Type: "AWS::ElastiCache::SubnetGroup"
+    Properties: 
+      Description: "Cache Subnet Group"
+      SubnetIds:
+        - Fn::ImportValue: !Sub "${NetworkStackName}-PublicSubnet1ID"
+          
+  ElasticacheCluster:
+    Type: "AWS::ElastiCache::CacheCluster"
+    Properties:
+      AutoMinorVersionUpgrade: "true"
+      Engine: !Ref CacheEngine
+      CacheNodeType: !Ref CacheNodeType
+      NumCacheNodes: "1"
+      CacheSubnetGroupName: !Ref SubnetGroup
+      VpcSecurityGroupIds:
+        -
+          Fn::GetAtt:
+            - "SecurityGroup"
+            - "GroupId"
