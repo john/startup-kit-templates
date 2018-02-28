@@ -1,12 +1,28 @@
+
+# support replica count?
+
+# replication groups? just for redis i think.
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticache-replicationgroup.html
+
+# params for encryption at rest and in transit, or just make those unchangeable defaults? oh... that only works with redis, and version 3.2.6.
+
+# enable automatic backups? SnapshotRetentionLimit, redis only
+
+# for next release:
+  # implement into top-level tempmlates
+  # add to test harness
+  # sns notificaitons for maintenance?
+  # support multi-az failover. now or next release?
+  # need to set versions (would be different for redis and memcached)?
+
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
 Description: ElastiCache and related resources
 
-# ElastiCache stack creation prerequisite:  First create a VPC stack - see README for more info
 Parameters:
   
-  # VPCStack
+  # ElastiCache stack creation prerequisite:  First create a VPC stack - see README for more info
   NetworkStackName:
     Description: Active CloudFormation stack containing VPC resources
     Type: String
@@ -39,7 +55,6 @@ Parameters:
       - cache.r4.8xlarge
       - cache.r4.16xlarge
       
-      
   CacheEngine:
     Description: The underlying cache engine, either Redis or Memcached
     Type: String
@@ -48,6 +63,18 @@ Parameters:
     AllowedValues:
       - redis
       - memcached
+      
+  CacheNodeCount:
+    Description: Number of nodes in the cluster
+    Type: Number
+    MinValue: 1
+    MaxValue: 10
+    ConstraintDescription: Node count must be between 1 and 100
+    Default: 1
+
+Conditions:
+ 
+  IsRedis: !Equals [ !Ref CacheEngine, redis]
   
 Resources:
 
@@ -60,26 +87,65 @@ Resources:
       SecurityGroupIngress:
         -
           IpProtocol: tcp
-          FromPort: 11211
-          ToPort: 11211
+          FromPort: !If [ IsRedis, 6379, 11211]
+          ToPort: !If [ IsRedis, 6379, 11211]
       
   SubnetGroup: 
-    Type: "AWS::ElastiCache::SubnetGroup"
+    Type: AWS::ElastiCache::SubnetGroup
     Properties: 
-      Description: "Cache Subnet Group"
+      Description: Cache Subnet Group
       SubnetIds:
         - Fn::ImportValue: !Sub "${NetworkStackName}-PublicSubnet1ID"
+        - Fn::ImportValue: !Sub "${NetworkStackName}-PrivateSubnet2ID"
           
   ElasticacheCluster:
-    Type: "AWS::ElastiCache::CacheCluster"
+    Type: AWS::ElastiCache::CacheCluster
     Properties:
-      AutoMinorVersionUpgrade: "true"
+      AutoMinorVersionUpgrade: true
       Engine: !Ref CacheEngine
       CacheNodeType: !Ref CacheNodeType
-      NumCacheNodes: "1"
+      NumCacheNodes: !Ref CacheNodeCount
       CacheSubnetGroupName: !Ref SubnetGroup
       VpcSecurityGroupIds:
-        -
-          Fn::GetAtt:
-            - "SecurityGroup"
-            - "GroupId"
+        - !GetAtt SecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Ref "AWS::StackName"
+          
+Outputs:
+
+  ElastiCacheStackName:
+    Description: Elasticache Stack Name
+    Value: !Ref AWS::StackName
+    Export:
+      Name: !Sub ${AWS::StackName}-ElastiCacheName
+      
+  ElastiCacheClusterArn:
+    Description: Elasticache Cluster Arn
+    Value: !Sub arn:aws:elasticache:${AWS::Region}:${AWS::AccountId}:cluster/${ElasticacheCluster}
+    Export:
+      Name: !Sub ${AWS::StackName}-ElastiCacheClusterArn
+      
+  ElastiCacheClusterId:
+    Description: Elasticache Cluster ID
+    Value: !Ref ElasticacheCluster
+    Export:
+      Name: !Sub "${AWS::StackName}-ElastiCacheClusterID"
+      
+  ElastiCacheEngine:
+    Description: Elasticache engine
+    Value: !Ref CacheEngine
+    Export:
+      Name: !Sub "${AWS::StackName}-ElastiCacheEngine"
+      
+  ElastiCacheAddress:
+    Description: Elasticache endpoint address
+    Value: !If [ IsRedis, !GetAtt ElasticacheCluster.RedisEndpoint.Address, !GetAtt ElasticacheCluster.ConfigurationEndpoint.Address]
+    Export:
+      Name: !Sub "${AWS::StackName}-ElastiCacheAddress"
+      
+  ElastiCachePort:
+    Description: Elasticache port
+    Value: !If [ IsRedis, 6379, 11211]
+    Export:
+      Name: !Sub "${AWS::StackName}-ElastiCachePort"
