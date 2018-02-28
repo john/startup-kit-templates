@@ -1,20 +1,3 @@
-
-# support replica count?
-
-# replication groups? just for redis i think.
-# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticache-replicationgroup.html
-
-# params for encryption at rest and in transit, or just make those unchangeable defaults? oh... that only works with redis, and version 3.2.6.
-
-# enable automatic backups? SnapshotRetentionLimit, redis only
-
-# for next release:
-  # implement into top-level tempmlates
-  # add to test harness
-  # sns notificaitons for maintenance?
-  # support multi-az failover. now or next release?
-  # need to set versions (would be different for redis and memcached)?
-
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
